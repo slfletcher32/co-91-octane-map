@@ -13,29 +13,36 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f4f8; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f4f8; overflow: hidden; }
+
+  /* ── Header ── */
   #header {
     background: linear-gradient(135deg, #1a3a5c, #2563a8);
-    color: white; padding: 16px 24px;
+    color: white; padding: 10px 16px;
     display: flex; align-items: center; justify-content: space-between;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3); z-index: 1000; position: relative;
+    height: 56px;
   }
-  #header h1 { font-size: 1.3rem; font-weight: 700; }
-  #header p { font-size: 0.85rem; opacity: 0.85; margin-top: 2px; }
+  #header h1 { font-size: 1rem; font-weight: 700; }
+  #header p  { font-size: 0.72rem; opacity: 0.85; margin-top: 1px; }
   #badge {
     background: #f59e0b; color: #1a1a1a; border-radius: 20px;
-    padding: 6px 14px; font-weight: 700; font-size: 0.95rem;
-    white-space: nowrap;
+    padding: 4px 10px; font-weight: 700; font-size: 0.82rem; white-space: nowrap;
   }
-  #container { display: flex; height: calc(100vh - 70px); }
+
+  /* ── Desktop layout ── */
+  #container { display: flex; height: calc(100vh - 56px); }
   #sidebar {
     width: 320px; min-width: 280px; background: white;
     overflow-y: auto; border-right: 1px solid #dde3ea;
-    display: flex; flex-direction: column;
+    display: flex; flex-direction: column; z-index: 10;
   }
+  #map { flex: 1; }
+
+  /* ── Search box ── */
   #search-box {
-    padding: 12px; border-bottom: 1px solid #eee; position: sticky; top: 0;
-    background: white; z-index: 10;
+    padding: 10px 12px; border-bottom: 1px solid #eee;
+    position: sticky; top: 0; background: white; z-index: 10;
   }
   #search-box input {
     width: 100%; padding: 8px 12px; border: 1px solid #ccc;
@@ -43,36 +50,94 @@
   }
   #search-box input:focus { border-color: #2563a8; }
   #station-count {
-    padding: 8px 12px; font-size: 0.8rem; color: #666;
+    padding: 6px 12px; font-size: 0.78rem; color: #666;
     background: #f8f9fa; border-bottom: 1px solid #eee;
   }
+
+  /* ── Station cards ── */
   .station-card {
-    padding: 12px 14px; border-bottom: 1px solid #eee;
+    padding: 11px 14px; border-bottom: 1px solid #eee;
     cursor: pointer; transition: background 0.15s;
   }
-  .station-card:hover { background: #eff6ff; }
+  .station-card:hover  { background: #eff6ff; }
   .station-card.active { background: #dbeafe; border-left: 3px solid #2563a8; }
-  .station-name { font-weight: 600; font-size: 0.9rem; color: #1a3a5c; }
-  .station-city { font-size: 0.8rem; color: #666; margin-top: 2px; }
-  .station-addr { font-size: 0.78rem; color: #888; margin-top: 2px; }
-  .station-meta { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
-  .tag {
-    font-size: 0.7rem; padding: 2px 7px; border-radius: 10px;
-    font-weight: 600; white-space: nowrap;
-  }
+  .station-name { font-weight: 600; font-size: 0.88rem; color: #1a3a5c; }
+  .station-city { font-size: 0.78rem; color: #666; margin-top: 2px; }
+  .station-addr { font-size: 0.75rem; color: #888; margin-top: 2px; }
+  .station-meta { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+  .tag { font-size: 0.68rem; padding: 2px 7px; border-radius: 10px; font-weight: 600; white-space: nowrap; }
   .tag-octane { background: #dcfce7; color: #166534; }
   .tag-brand  { background: #e0e7ff; color: #3730a3; }
   .tag-phone  { background: #fef3c7; color: #92400e; }
-  #map { flex: 1; }
+
+  /* ── Popup ── */
   .leaflet-popup-content-wrapper { border-radius: 10px; }
   .popup-title { font-weight: 700; font-size: 1rem; color: #1a3a5c; margin-bottom: 4px; }
-  .popup-row { font-size: 0.85rem; color: #444; margin: 2px 0; }
+  .popup-row   { font-size: 0.85rem; color: #444; margin: 2px 0; }
   .popup-badge {
     display: inline-block; margin-top: 6px; padding: 3px 10px;
     background: #dcfce7; color: #166534; border-radius: 10px;
     font-size: 0.75rem; font-weight: 700;
   }
   .popup-badge.multi { background: #e0e7ff; color: #3730a3; }
+
+  /* ── Mobile: bottom drawer ── */
+  #list-toggle {
+    display: none;
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: #2563a8; color: white; border: none; border-radius: 24px;
+    padding: 12px 24px; font-size: 0.95rem; font-weight: 700;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.35); cursor: pointer; z-index: 2000;
+    white-space: nowrap;
+  }
+  #drawer {
+    display: none;
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: white; border-radius: 20px 20px 0 0;
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.2);
+    z-index: 3000; max-height: 70vh;
+    flex-direction: column; transition: transform 0.3s ease;
+  }
+  #drawer.open { display: flex; }
+  #drawer-handle {
+    text-align: center; padding: 10px 0 4px;
+    cursor: pointer; flex-shrink: 0;
+  }
+  #drawer-handle::before {
+    content: ''; display: inline-block;
+    width: 40px; height: 4px; background: #ccc; border-radius: 2px;
+  }
+  #drawer-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 4px 14px 10px; flex-shrink: 0; border-bottom: 1px solid #eee;
+  }
+  #drawer-header span { font-weight: 700; font-size: 0.95rem; color: #1a3a5c; }
+  #drawer-close {
+    background: none; border: none; font-size: 1.3rem;
+    color: #888; cursor: pointer; padding: 4px 8px;
+  }
+  #drawer-search {
+    padding: 8px 14px; border-bottom: 1px solid #eee; flex-shrink: 0;
+  }
+  #drawer-search input {
+    width: 100%; padding: 8px 12px; border: 1px solid #ccc;
+    border-radius: 8px; font-size: 0.9rem; outline: none;
+  }
+  #drawer-count {
+    padding: 5px 14px; font-size: 0.75rem; color: #666;
+    background: #f8f9fa; border-bottom: 1px solid #eee; flex-shrink: 0;
+  }
+  #drawer-list { overflow-y: auto; flex: 1; }
+
+  /* ── Mobile breakpoint ── */
+  @media (max-width: 640px) {
+    #header h1 { font-size: 0.88rem; }
+    #header p  { display: none; }
+    #container { flex-direction: column; }
+    #sidebar   { display: none; }
+    #map       { width: 100%; height: calc(100vh - 56px); }
+    #list-toggle { display: block; }
+  }
 </style>
 </head>
 <body>
@@ -94,6 +159,22 @@
     <div id="station-list"></div>
   </div>
   <div id="map"></div>
+</div>
+
+<!-- Mobile: floating button + bottom drawer -->
+<button id="list-toggle" onclick="openDrawer()">📋 Station List</button>
+
+<div id="drawer">
+  <div id="drawer-handle" onclick="closeDrawer()"></div>
+  <div id="drawer-header">
+    <span>⛽ Stations List</span>
+    <button id="drawer-close" onclick="closeDrawer()">✕</button>
+  </div>
+  <div id="drawer-search">
+    <input type="text" id="search-mobile" placeholder="🔍 Search city or name...">
+  </div>
+  <div id="drawer-count"></div>
+  <div id="drawer-list"></div>
 </div>
 
 <script>
@@ -220,15 +301,16 @@ stations.forEach((s, idx) => {
 map.addLayer(clusterGroup);
 
 function renderList(filtered) {
-  const list = document.getElementById('station-list');
-  const count = document.getElementById('station-count');
-  list.innerHTML = filtered.map((s, i) => buildCard(s, stations.indexOf(s))).join('');
-  count.textContent = `Showing ${filtered.length} of ${stations.length} stations`;
+  const html = filtered.map((s) => buildCard(s, stations.indexOf(s))).join('');
+  document.getElementById('station-list').innerHTML = html;
+  document.getElementById('drawer-list').innerHTML = html;
+  const countText = `Showing ${filtered.length} of ${stations.length} stations`;
+  document.getElementById('station-count').textContent = countText;
+  document.getElementById('drawer-count').textContent = countText;
   document.getElementById('badge').textContent = `${stations.length} Stations`;
 }
 
 function focusStation(idx, fromMap = false) {
-  const s = stations[idx];
   if (activeCard) activeCard.classList.remove('active');
   const card = document.getElementById(`card-${idx}`);
   if (card) {
@@ -238,15 +320,14 @@ function focusStation(idx, fromMap = false) {
   }
   markers.forEach((m, i) => m.setIcon(i === idx ? gasIconActive : gasIcon));
   if (!fromMap) {
+    closeDrawer();
     clusterGroup.zoomToShowLayer(markers[idx], () => markers[idx].openPopup());
   } else {
     markers[idx].openPopup();
   }
 }
 
-// Search
-document.getElementById('search').addEventListener('input', function() {
-  const q = this.value.toLowerCase();
+function filterStations(q) {
   const filtered = q
     ? stations.filter(s =>
         s.name.toLowerCase().includes(q) ||
@@ -254,14 +335,30 @@ document.getElementById('search').addEventListener('input', function() {
         s.brand.toLowerCase().includes(q) ||
         s.addr.toLowerCase().includes(q))
     : stations;
-
   clusterGroup.clearLayers();
   stations.forEach((s, i) => {
     markers[i].setIcon(gasIcon);
     if (filtered.includes(s)) clusterGroup.addLayer(markers[i]);
   });
   renderList(filtered);
+}
+
+// Sync both search inputs
+document.getElementById('search').addEventListener('input', function() {
+  document.getElementById('search-mobile').value = this.value;
+  filterStations(this.value.toLowerCase());
 });
+document.getElementById('search-mobile').addEventListener('input', function() {
+  document.getElementById('search').value = this.value;
+  filterStations(this.value.toLowerCase());
+});
+
+// Drawer functions
+function openDrawer()  { document.getElementById('drawer').classList.add('open'); }
+function closeDrawer() { document.getElementById('drawer').classList.remove('open'); }
+
+// Close drawer on map tap
+document.getElementById('map').addEventListener('click', closeDrawer);
 
 renderList(stations);
 </script>
