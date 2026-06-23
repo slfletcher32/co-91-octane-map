@@ -4,8 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Colorado 91 Octane Ethanol-Free Gas Stations</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Leaflet from cdnjs (faster than unpkg) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<!-- Marker clustering -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.min.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f4f8; }
@@ -161,9 +166,9 @@ const stations = [
 // ── Map setup ─────────────────────────────────────────────────────────────
 const map = L.map('map').setView([39.0, -105.5], 7);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
-  maxZoom: 19
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  attribution: '© <a href="https://carto.com/">CARTO</a> © <a href="https://openstreetmap.org">OSM</a>',
+  subdomains: 'abcd', maxZoom: 19
 }).addTo(map);
 
 // Custom red gas pump icon
@@ -176,6 +181,8 @@ const gasIconActive = L.divIcon({
   iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -18], className: ''
 });
 
+// Marker cluster group for fast rendering
+const clusterGroup = L.markerClusterGroup({ maxClusterRadius: 40, disableClusteringAtZoom: 11 });
 let markers = [];
 let activeCard = null;
 
@@ -202,17 +209,15 @@ function buildCard(s, idx) {
   </div>`;
 }
 
-// Create markers and sidebar cards
+// Create markers and add to cluster group
 stations.forEach((s, idx) => {
   const marker = L.marker([s.lat, s.lng], { icon: gasIcon })
-    .addTo(map)
     .bindPopup(buildPopup(s), { maxWidth: 280 });
-
-  marker.on('click', () => {
-    focusStation(idx, true);
-  });
+  marker.on('click', () => focusStation(idx, true));
   markers.push(marker);
+  clusterGroup.addLayer(marker);
 });
+map.addLayer(clusterGroup);
 
 function renderList(filtered) {
   const list = document.getElementById('station-list');
@@ -224,7 +229,6 @@ function renderList(filtered) {
 
 function focusStation(idx, fromMap = false) {
   const s = stations[idx];
-  // Update sidebar
   if (activeCard) activeCard.classList.remove('active');
   const card = document.getElementById(`card-${idx}`);
   if (card) {
@@ -232,12 +236,12 @@ function focusStation(idx, fromMap = false) {
     card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     activeCard = card;
   }
-  // Update map
   markers.forEach((m, i) => m.setIcon(i === idx ? gasIconActive : gasIcon));
   if (!fromMap) {
-    map.setView([s.lat, s.lng], 13, { animate: true });
+    clusterGroup.zoomToShowLayer(markers[idx], () => markers[idx].openPopup());
+  } else {
+    markers[idx].openPopup();
   }
-  markers[idx].openPopup();
 }
 
 // Search
@@ -251,13 +255,10 @@ document.getElementById('search').addEventListener('input', function() {
         s.addr.toLowerCase().includes(q))
     : stations;
 
-  // Show/hide markers
+  clusterGroup.clearLayers();
   stations.forEach((s, i) => {
-    if (filtered.includes(s)) {
-      if (!map.hasLayer(markers[i])) markers[i].addTo(map);
-    } else {
-      if (map.hasLayer(markers[i])) map.removeLayer(markers[i]);
-    }
+    markers[i].setIcon(gasIcon);
+    if (filtered.includes(s)) clusterGroup.addLayer(markers[i]);
   });
   renderList(filtered);
 });
