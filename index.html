@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Colorado 91 Octane Ethanol-Free Gas Stations</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f4f8; }
+  #header {
+    background: linear-gradient(135deg, #1a3a5c, #2563a8);
+    color: white; padding: 16px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  #header h1 { font-size: 1.3rem; font-weight: 700; }
+  #header p { font-size: 0.85rem; opacity: 0.85; margin-top: 2px; }
+  #badge {
+    background: #f59e0b; color: #1a1a1a; border-radius: 20px;
+    padding: 6px 14px; font-weight: 700; font-size: 0.95rem;
+    white-space: nowrap;
+  }
+  #container { display: flex; height: calc(100vh - 70px); }
+  #sidebar {
+    width: 320px; min-width: 280px; background: white;
+    overflow-y: auto; border-right: 1px solid #dde3ea;
+    display: flex; flex-direction: column;
+  }
+  #search-box {
+    padding: 12px; border-bottom: 1px solid #eee; position: sticky; top: 0;
+    background: white; z-index: 10;
+  }
+  #search-box input {
+    width: 100%; padding: 8px 12px; border: 1px solid #ccc;
+    border-radius: 8px; font-size: 0.9rem; outline: none;
+  }
+  #search-box input:focus { border-color: #2563a8; }
+  #station-count {
+    padding: 8px 12px; font-size: 0.8rem; color: #666;
+    background: #f8f9fa; border-bottom: 1px solid #eee;
+  }
+  .station-card {
+    padding: 12px 14px; border-bottom: 1px solid #eee;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .station-card:hover { background: #eff6ff; }
+  .station-card.active { background: #dbeafe; border-left: 3px solid #2563a8; }
+  .station-name { font-weight: 600; font-size: 0.9rem; color: #1a3a5c; }
+  .station-city { font-size: 0.8rem; color: #666; margin-top: 2px; }
+  .station-addr { font-size: 0.78rem; color: #888; margin-top: 2px; }
+  .station-meta { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
+  .tag {
+    font-size: 0.7rem; padding: 2px 7px; border-radius: 10px;
+    font-weight: 600; white-space: nowrap;
+  }
+  .tag-octane { background: #dcfce7; color: #166534; }
+  .tag-brand  { background: #e0e7ff; color: #3730a3; }
+  .tag-phone  { background: #fef3c7; color: #92400e; }
+  #map { flex: 1; }
+  .leaflet-popup-content-wrapper { border-radius: 10px; }
+  .popup-title { font-weight: 700; font-size: 1rem; color: #1a3a5c; margin-bottom: 4px; }
+  .popup-row { font-size: 0.85rem; color: #444; margin: 2px 0; }
+  .popup-badge {
+    display: inline-block; margin-top: 6px; padding: 3px 10px;
+    background: #dcfce7; color: #166534; border-radius: 10px;
+    font-size: 0.75rem; font-weight: 700;
+  }
+  .popup-badge.multi { background: #e0e7ff; color: #3730a3; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div>
+    <h1>⛽ Colorado 91 Octane Ethanol-Free Gas</h1>
+    <p>Source: pure-gas.org &nbsp;|&nbsp; All stations selling E0 91+ octane</p>
+  </div>
+  <div id="badge" id="count-badge">Loading...</div>
+</div>
+
+<div id="container">
+  <div id="sidebar">
+    <div id="search-box">
+      <input type="text" id="search" placeholder="🔍 Search by city or station name...">
+    </div>
+    <div id="station-count"></div>
+    <div id="station-list"></div>
+  </div>
+  <div id="map"></div>
+</div>
+
+<script>
+// ── Station data (91 octane E0 only, Colorado) ────────────────────────────
+const stations = [
+  { name: "Taylor Park Trading Post",   city: "Almont",           addr: "23044 Cnty Rd 742",          phone: "970-641-2555", brand: "UNBRANDED",   octane: "91",     lat: 38.6644, lng: -106.8446 },
+  { name: "Piedra Peak General Store",  city: "Arboles",          addr: "53 County Road 982",          phone: "970-883-2395", brand: "UNBRANDED",   octane: "91",     lat: 37.0133, lng: -107.4187 },
+  { name: "Korner Store",               city: "Berthoud",         addr: "437 Meadowlark Dr",           phone: "970-532-4967", brand: "SINCLAIR",    octane: "91",     lat: 40.3075, lng: -105.0811 },
+  { name: "Acorn Petroleum",            city: "Canon City",       addr: "302 S 1st St",                phone: "719-275-6417", brand: "UNBRANDED",   octane: "91",     lat: 38.4409, lng: -105.2430 },
+  { name: "Roaring Fork Valley Coop",   city: "Carbondale",       addr: "760 Hwy 133",                 phone: "970-963-2220", brand: "CO-OP",       octane: "91",     lat: 39.3994, lng: -107.2119 },
+  { name: "Chief Petroleum",            city: "Colorado Springs", addr: "2808 N Nevada Ave",           phone: "719-473-7760", brand: "UNBRANDED",   octane: "91",     lat: 38.8730, lng: -104.8214 },
+  { name: "Chief Petroleum Co",         city: "Colorado Springs", addr: "301 S 10th St",               phone: "719-473-7760", brand: "UNBRANDED",   octane: "91/100", lat: 38.8284, lng: -104.8323 },
+  { name: "Quiktrip Store #4297",       city: "Colorado Springs", addr: "1590 N Academy Blvd",         phone: "719-551-4382", brand: "QUIKTRIP",    octane: "91",     lat: 38.9023, lng: -104.7743 },
+  { name: "Steamboat Lake Outpost",     city: "Clark",            addr: "60880 Cr 129",                phone: "970-879-4404", brand: "UNBRANDED",   octane: "91",     lat: 40.8128, lng: -106.9305 },
+  { name: "Craig Card Lock",            city: "Craig",            addr: "923 E Victory Way",           phone: "970-876-2301", brand: "SINCLAIR",    octane: "91",     lat: 40.5153, lng: -107.5416 },
+  { name: "Elephant Cloud Inc",         city: "Crestone",         addr: "200 Cottonwood St",           phone: "719-256-5544", brand: "UNBRANDED",   octane: "91",     lat: 37.9958, lng: -105.6953 },
+  { name: "High Plains Raceway",        city: "Deer Trail",       addr: "93301 Us Hwy 36 E",           phone: "303-769-4771", brand: "UNBRANDED",   octane: "91",     lat: 39.6136, lng: -104.0394 },
+  { name: "Dolores Outfitters",         city: "Dolores",          addr: "341 Railroad Ave",            phone: "970-676-0066", brand: "UNBRANDED",   octane: "91",     lat: 37.4742, lng: -108.5027 },
+  { name: "Brennan Oil",                city: "Durango",          addr: "26273 Us Hwy 160 E",          phone: "970-247-3054", brand: "UNBRANDED",   octane: "91",     lat: 37.2753, lng: -107.8373 },
+  { name: "Horsetooth Inn RV Park",     city: "Fort Collins",     addr: "4737 Shoreline Dr",           phone: "970-999-5650", brand: "UNBRANDED",   octane: "91",     lat: 40.5327, lng: -105.1536 },
+  { name: "Magnolia Street Market",     city: "Fort Collins",     addr: "710 E Magnolia St",           phone: "970-482-3665", brand: "FRONTIER",    octane: "91",     lat: 40.5726, lng: -105.0621 },
+  { name: "Winter Park Market",         city: "Fraser",           addr: "46 Market St",                phone: "970-726-4704", brand: "SINCLAIR",    octane: "91",     lat: 39.9447, lng: -105.8186 },
+  { name: "Profuels Of Fruita",         city: "Fruita",           addr: "221 E Hwy 6&50",              phone: "970-858-1400", brand: "UNBRANDED",   octane: "91",     lat: 39.1533, lng: -108.7282 },
+  { name: "Indian Peaks Marina",        city: "Granby",           addr: "6862 Us Hwy 34",              phone: "970-887-3456", brand: "UNBRANDED",   octane: "93",     lat: 40.1197, lng: -105.9019 },
+  { name: "Tall Country Granby",        city: "Granby",           addr: "551 E Agate Ave",             phone: "970-887-3314", brand: "SINCLAIR",    octane: "91",     lat: 40.0861, lng: -105.9329 },
+  { name: "Sinclair Gas Station",       city: "Grand Junction",   addr: "2515 Us Hwy 6 & 50",          phone: "970-243-7560", brand: "SINCLAIR",    octane: "91",     lat: 39.0639, lng: -108.5506 },
+  { name: "Trail Ridge Marina",         city: "Grand Lake",       addr: "12634 Us Hwy 34",             phone: "970-627-3586", brand: "UNBRANDED",   octane: "91",     lat: 40.2522, lng: -105.8244 },
+  { name: "Gunnison Auto & Performance",city: "Gunnison",         addr: "508 W Tomichi Ave",           phone: "970-596-4729", brand: "UNBRANDED",   octane: "91",     lat: 38.5458, lng: -106.9295 },
+  { name: "Powerstop",                  city: "Gunnison",         addr: "905 N Main St",               phone: "970-641-2328", brand: "UNBRANDED",   octane: "91",     lat: 38.5539, lng: -106.9297 },
+  { name: "Standard Tire",              city: "Gunnison",         addr: "412 W Tomichi Ave",           phone: "970-641-0202", brand: "UNBRANDED",   octane: "91",     lat: 38.5460, lng: -106.9281 },
+  { name: "Badger Basin",               city: "Hartsel",          addr: "12551 Us Hwy 24",             phone: "719-836-2142", brand: "UNBRANDED",   octane: "91",     lat: 38.9644, lng: -105.8047 },
+  { name: "Zip Trip",                   city: "Haxtun",           addr: "105 E Strohm St",             phone: "970-774-7353", brand: "CENEX",       octane: "91",     lat: 40.6444, lng: -102.6224 },
+  { name: "Zip Trip",                   city: "Holyoke",          addr: "220 W Denver St",             phone: "970-854-3399", brand: "CENEX",       octane: "91",     lat: 40.5864, lng: -102.3007 },
+  { name: "Shell",                      city: "Julesburg",        addr: "15172 Us Hwy 385",            phone: "970-474-3653", brand: "SHELL",       octane: "91",     lat: 40.9886, lng: -102.2763 },
+  { name: "Valley Tire Of La Junta",    city: "La Junta",         addr: "1000 W 3rd St",               phone: "719-384-5497", brand: "UNBRANDED",   octane: "91",     lat: 37.9845, lng: -103.5455 },
+  { name: "Lake City Auto & Sports",    city: "Lake City",        addr: "809 Hwy 149",                 phone: "970-944-2311", brand: "CONOCO",      octane: "91",     lat: 38.0297, lng: -107.3189 },
+  { name: "Town Square Mini Mart",      city: "Lake City",        addr: "231 Gunnison St",             phone: "970-944-2236", brand: "UNBRANDED",   octane: "91",     lat: 38.0294, lng: -107.3207 },
+  { name: "Green Mountain Mobil",       city: "Lakewood",         addr: "12410 W Alameda Pkwy",        phone: "303-989-7820", brand: "MOBIL",       octane: "91",     lat: 39.6961, lng: -105.1498 },
+  { name: "Cox's Corner Store",         city: "Lewis",            addr: "18794 Hwy 491",               phone: "970-882-4248", brand: "CONOCO",      octane: "91",     lat: 37.5084, lng: -108.6986 },
+  { name: "Fly Elite Aviation",         city: "Longmont",         addr: "229 Airport Rd",              phone: "303-774-8081", brand: "UNBRANDED",   octane: "91",     lat: 40.1681, lng: -105.1016 },
+  { name: "Standard Service",           city: "Manassa",          addr: "418 Main St",                 phone: "719-843-5880", brand: "UNBRANDED",   octane: "91",     lat: 37.1761, lng: -105.9272 },
+  { name: "Cox Conoco",                 city: "Mancos",           addr: "201 E Railroad Ave",          phone: "970-533-7728", brand: "CONOCO",      octane: "91",     lat: 37.3439, lng: -108.2866 },
+  { name: "Flat Tops Fuel",             city: "Meeker",           addr: "427 E Market St",             phone: "970-878-5539", brand: "SINCLAIR",    octane: "91",     lat: 40.0377, lng: -107.9038 },
+  { name: "Go-Fer Foods & Deli",        city: "Meeker",           addr: "812 Market St",               phone: "970-878-5381", brand: "UNBRANDED",   octane: "91",     lat: 40.0383, lng: -107.9108 },
+  { name: "Humdingers",                 city: "Montrose",         addr: "2020 N Townsend Ave",         phone: "970-249-1331", brand: "PHILLIPS 66", octane: "91",     lat: 38.4911, lng: -107.8797 },
+  { name: "VP Race Fuels",              city: "Montrose",         addr: "17250 Us-550",                phone: "970-249-1819", brand: "VP RACING",   octane: "91/100", lat: 38.4200, lng: -107.8775 },
+  { name: "Centerville Sugar Shack",    city: "Nathrop",          addr: "17900 Us Hwy 285",            phone: "719-539-3834", brand: "UNBRANDED",   octane: "91",     lat: 38.7303, lng: -106.0869 },
+  { name: "Princeton Market",           city: "Nathrop",          addr: "15870 Cr 162",                phone: "888-395-7799", brand: "UNBRANDED",   octane: "91",     lat: 38.7553, lng: -106.1281 },
+  { name: "Oasis Travel Center",        city: "Colby KS",         addr: "700 West Horton Ave",         phone: "785-460-0044", brand: "CENEX",       octane: "91",     lat: 39.3961, lng: -101.0524 },
+  { name: "Ouray Riverside Resort",     city: "Ouray",            addr: "1804 North Main Street",      phone: "970-325-4523", brand: "UNBRANDED",   octane: "91",     lat: 38.0236, lng: -107.6722 },
+  { name: "Pitkin Silver Plume Gen Store", city: "Pitkin",        addr: "204 N 9th Ave",               phone: "970-641-3866", brand: "UNBRANDED",   octane: "91",     lat: 38.6080, lng: -106.5191 },
+  { name: "Dino Mart",                  city: "Pueblo",           addr: "108 Baxter Road",             phone: "719-948-4537", brand: "SINCLAIR",    octane: "91",     lat: 38.2195, lng: -104.5386 },
+  { name: "South Shore Marina",         city: "Pueblo",           addr: "1 S Marina Rd",               phone: "719-564-1043", brand: "UNBRANDED",   octane: "91",     lat: 38.2200, lng: -104.5892 },
+  { name: "North Shore Marina",         city: "Pueblo West",      addr: "1 N Marina Rd",               phone: "719-547-3880", brand: "UNBRANDED",   octane: "91",     lat: 38.2452, lng: -104.5892 },
+  { name: "Rangely Conoco",             city: "Rangely",          addr: "102 E Main St",               phone: "970-675-2090", brand: "CONOCO",      octane: "91",     lat: 40.0894, lng: -108.8003 },
+  { name: "Red Feather Trading Post",   city: "Red Feather Lakes",addr: "41 Main St",                  phone: "970-881-2912", brand: "UNBRANDED",   octane: "91",     lat: 40.8000, lng: -105.5661 },
+  { name: "Sinclair",                   city: "Salida",           addr: "445 W Rainbow Blvd",          phone: "719-539-7251", brand: "SINCLAIR",    octane: "91",     lat: 38.5322, lng: -106.0072 },
+  { name: "Tomichi Creek Trading Post", city: "Sargents",         addr: "71420 Us Hwy 50",             phone: "970-641-0674", brand: "UNBRANDED",   octane: "91",     lat: 38.4019, lng: -106.4206 },
+  { name: "Station 550 Triangle Motel", city: "Silverton",        addr: "864 Greene St",               phone: "970-387-5780", brand: "UNBRANDED",   octane: "91",     lat: 37.8120, lng: -107.6642 },
+  { name: "Bob's Downtown Conoco",      city: "Steamboat Springs",addr: "942 Lincoln Ave",             phone: "970-879-9735", brand: "CONOCO",      octane: "91",     lat: 40.4850, lng: -106.8317 },
+  { name: "Ski Haus Conoco",            city: "Steamboat Springs",addr: "1450 S Lincoln Ave",          phone: "970-879-9271", brand: "CONOCO",      octane: "91",     lat: 40.4761, lng: -106.8275 },
+  { name: "Southside Station",          city: "Steamboat Springs",addr: "905 Weiss Dr",                phone: "970-879-8477", brand: "SINCLAIR",    octane: "91",     lat: 40.4722, lng: -106.8253 },
+  { name: "Eagle Convenience Store",    city: "Sterling",         addr: "930 W Main St",               phone: "970-522-6626", brand: "CENEX",       octane: "91",     lat: 40.6244, lng: -103.2147 },
+  { name: "Eagle Travel Stop",          city: "Sterling",         addr: "20974 Us Hwy 6",              phone: "970-522-2858", brand: "CENEX",       octane: "91",     lat: 40.6347, lng: -103.2436 },
+  { name: "Egeria Park Store",          city: "Toponas",          addr: "10000 Hwy 131",               phone: "970-638-4483", brand: "UNBRANDED",   octane: "91",     lat: 40.0706, lng: -106.9086 },
+  { name: "Eagle Oil Co-Op",            city: "Wray",             addr: "31973 Us Hwy 34",             phone: "970-332-0683", brand: "UNBRANDED",   octane: "91",     lat: 40.0758, lng: -102.2224 },
+  { name: "Pynergy Petroleum",          city: "Commerce City",    addr: "5480 Brighton Blvd",          phone: "303-292-5005", brand: "UNBRANDED",   octane: "91+",    lat: 39.8436, lng: -104.9483 },
+];
+
+// ── Map setup ─────────────────────────────────────────────────────────────
+const map = L.map('map').setView([39.0, -105.5], 7);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
+  maxZoom: 19
+}).addTo(map);
+
+// Custom red gas pump icon
+const gasIcon = L.divIcon({
+  html: `<div style="background:#dc2626;color:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 6px rgba(0,0,0,0.4);border:2px solid white;">⛽</div>`,
+  iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -16], className: ''
+});
+const gasIconActive = L.divIcon({
+  html: `<div style="background:#1d4ed8;color:white;border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 10px rgba(0,0,0,0.5);border:3px solid white;">⛽</div>`,
+  iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -18], className: ''
+});
+
+let markers = [];
+let activeCard = null;
+
+function buildPopup(s) {
+  const isMulti = s.octane.includes('/') || s.octane.includes('+');
+  return `<div class="popup-title">${s.name}</div>
+    <div class="popup-row">📍 ${s.addr}, ${s.city}, CO</div>
+    <div class="popup-row">📞 ${s.phone}</div>
+    <div class="popup-row">🏷️ ${s.brand}</div>
+    <span class="popup-badge ${isMulti ? 'multi' : ''}">${s.octane} Octane E0</span>`;
+}
+
+function buildCard(s, idx) {
+  const isMulti = s.octane.includes('/') || s.octane.includes('+');
+  return `<div class="station-card" id="card-${idx}" onclick="focusStation(${idx})">
+    <div class="station-name">${s.name}</div>
+    <div class="station-city">${s.city}, CO</div>
+    <div class="station-addr">${s.addr}</div>
+    <div class="station-meta">
+      <span class="tag tag-octane">${s.octane} Oct</span>
+      <span class="tag tag-brand">${s.brand}</span>
+      ${s.phone !== ' ' ? `<span class="tag tag-phone">${s.phone}</span>` : ''}
+    </div>
+  </div>`;
+}
+
+// Create markers and sidebar cards
+stations.forEach((s, idx) => {
+  const marker = L.marker([s.lat, s.lng], { icon: gasIcon })
+    .addTo(map)
+    .bindPopup(buildPopup(s), { maxWidth: 280 });
+
+  marker.on('click', () => {
+    focusStation(idx, true);
+  });
+  markers.push(marker);
+});
+
+function renderList(filtered) {
+  const list = document.getElementById('station-list');
+  const count = document.getElementById('station-count');
+  list.innerHTML = filtered.map((s, i) => buildCard(s, stations.indexOf(s))).join('');
+  count.textContent = `Showing ${filtered.length} of ${stations.length} stations`;
+  document.getElementById('badge').textContent = `${stations.length} Stations`;
+}
+
+function focusStation(idx, fromMap = false) {
+  const s = stations[idx];
+  // Update sidebar
+  if (activeCard) activeCard.classList.remove('active');
+  const card = document.getElementById(`card-${idx}`);
+  if (card) {
+    card.classList.add('active');
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    activeCard = card;
+  }
+  // Update map
+  markers.forEach((m, i) => m.setIcon(i === idx ? gasIconActive : gasIcon));
+  if (!fromMap) {
+    map.setView([s.lat, s.lng], 13, { animate: true });
+  }
+  markers[idx].openPopup();
+}
+
+// Search
+document.getElementById('search').addEventListener('input', function() {
+  const q = this.value.toLowerCase();
+  const filtered = q
+    ? stations.filter(s =>
+        s.name.toLowerCase().includes(q) ||
+        s.city.toLowerCase().includes(q) ||
+        s.brand.toLowerCase().includes(q) ||
+        s.addr.toLowerCase().includes(q))
+    : stations;
+
+  // Show/hide markers
+  stations.forEach((s, i) => {
+    if (filtered.includes(s)) {
+      if (!map.hasLayer(markers[i])) markers[i].addTo(map);
+    } else {
+      if (map.hasLayer(markers[i])) map.removeLayer(markers[i]);
+    }
+  });
+  renderList(filtered);
+});
+
+renderList(stations);
+</script>
+</body>
+</html>
